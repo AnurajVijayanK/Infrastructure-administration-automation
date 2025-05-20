@@ -1,0 +1,122 @@
+Enhanced shell script version of your backup routine that:
+
+Adds timestamped backup names
+
+Verifies if source and destination paths exist
+
+Logs backup activity
+
+Sends optional email notification (commented out by default)
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#!/bin/bash
+
+# -------- Configuration --------
+SOURCE="/path/to/your/important/files"
+DESTINATION="/path/to/your/backup/directory"
+LOG_FILE="/var/log/backup_script.log"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+BACKUP_FILE="${DESTINATION}/backup_${TIMESTAMP}.tar.gz"
+EMAIL="you@example.com"  # Optional
+# --------------------------------
+
+# Check if source exists
+if [ ! -d "$SOURCE" ]; then
+    echo "[$(date)] ERROR: Source directory $SOURCE does not exist." | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+# Check if destination exists
+if [ ! -d "$DESTINATION" ]; then
+    echo "[$(date)] INFO: Destination $DESTINATION does not exist. Creating..." | tee -a "$LOG_FILE"
+    mkdir -p "$DESTINATION"
+fi
+
+# Create the backup
+echo "[$(date)] Starting backup..." | tee -a "$LOG_FILE"
+tar -czf "$BACKUP_FILE" -C "$SOURCE" .
+if [ $? -eq 0 ]; then
+    echo "[$(date)] Backup successful: $BACKUP_FILE" | tee -a "$LOG_FILE"
+else
+    echo "[$(date)] ERROR: Backup failed." | tee -a "$LOG_FILE"
+    exit 2
+fi
+
+# Optional email notification (requires `mailx` or `mailutils`)
+# echo "Backup completed at $(date)" | mail -s "Backup Success: $(hostname)" $EMAIL
+
+exit 0
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+To Use:
+Update the SOURCE, DESTINATION, and optionally EMAIL.
+
+Save as backup_important_files.sh.
+
+Make it executable:
+
+chmod +x backup_important_files.sh
+Run manually or schedule with cron.
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+To run this daily at 2 AM:
+
+
+0 2 * * * /path/to/backup_important_files.sh
+Let me know if you'd like a retention policy to delete backups older than X days or a version using rsync instead of tar.
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+Enhanced Ansible version of your shell script for backing up critical files with a timestamp.
+
+
+
+++++++++++++++++++++++++++++++++++++++++
+
+---
+- name: Backup important files with timestamp
+  hosts: all
+  become: true
+  vars:
+    source_dir: "/path/to/your/important/files"     # Update this
+    backup_dir: "/path/to/your/backup/directory"    # Update this
+
+  tasks:
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create timestamped archive of source directory
+      command: >
+        tar czf {{ backup_dir }}/backup_{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}.tar.gz -C {{ source_dir }} .
+      args:
+        creates: "{{ backup_dir }}"
+
+
++++++++++++++++++++++++++++++++++++++++++++
+
+
+Notes:
+Replace /path/to/your/important/files and /path/to/your/backup/directory with actual paths.
+
+This playbook creates a compressed archive .tar.gz with a timestamp.
+
+The archive is saved inside the destination directory with a filename like backup_20240520_150233.tar.gz.
+
+ Optional Enhancements:
+Add cron to run backups regularly.
+
+Add retention policy to delete older backups.
+
+Use ansible_date_time fact instead of lookup('pipe', 'date ...') if facts are gathered.
+
+Would you like me to add a backup retention policy or make this run daily via cron using Ansible?
+
