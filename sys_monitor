@@ -1,0 +1,122 @@
+Shell script to monitor system load, memory usage, disk usage, CPU usage, and also log the output with timestamps
+
+++++++++++++++++++++++++++++++++++++++++
+#!/bin/bash
+
+# Define log file
+LOG_FILE="/var/log/sys_monitor.log"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Get system information
+HOSTNAME=$(hostname)
+LOAD=$(uptime | awk -F'load average:' '{ print $2 }' | sed 's/^ //')
+FREE_MEM=$(free -h | awk '/^Mem:/ { print $4 " free of " $2 }')
+SWAP_MEM=$(free -h | awk '/^Swap:/ { print $4 " free of " $2 }')
+DISK_USAGE=$(df -h / | awk 'NR==2 { print $4 " free of " $2 }')
+CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8 "% used"}')
+
+# Output to screen
+echo "[$TIMESTAMP] Host: $HOSTNAME"
+echo "System Load Average (1/5/15 min): $LOAD"
+echo "Memory: $FREE_MEM"
+echo "Swap: $SWAP_MEM"
+echo "Disk (Root): $DISK_USAGE"
+echo "CPU Usage: $CPU_USAGE"
+
+# Log to file
+{
+  echo "[$TIMESTAMP] Host: $HOSTNAME"
+  echo "System Load Average (1/5/15 min): $LOAD"
+  echo "Memory: $FREE_MEM"
+  echo "Swap: $SWAP_MEM"
+  echo "Disk (Root): $DISK_USAGE"
+  echo "CPU Usage: $CPU_USAGE"
+  echo "----------------------------------------"
+} >> "$LOG_FILE"
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+nhancements:
+Logs detailed metrics to /var/log/sys_monitor.log.
+
+Adds CPU and swap memory info.
+
+Uses clear formatting with timestamps for each execution.
+
+More readable and scalable for automation (e.g., via cron).
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Ansible playbook that:
+
+Collects system load, memory, disk, and CPU usage.
+
+Displays the output.
+
+Logs the data to a file /var/log/sys_monitor.log on each target host.
+++++++++++++++++++++++++++++++++++++++++++++++++++++ 
+
+---
+- name: Monitor system resources and log them
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Get system load
+      command: uptime
+      register: uptime_output
+
+    - name: Get free memory
+      command: free -h
+      register: mem_output
+
+    - name: Get disk usage on /
+      command: df -h /
+      register: disk_output
+
+    - name: Get CPU usage
+      command: top -bn1
+      register: cpu_output
+
+    - name: Set timestamp
+      command: date '+%Y-%m-%d %H:%M:%S'
+      register: timestamp
+
+    - name: Build the log content
+      set_fact:
+        log_message: |
+          [{{ timestamp.stdout }}] Host: {{ inventory_hostname }}
+          System Load: {{ uptime_output.stdout | regex_replace('.*load average:', '') | trim }}
+          Memory: {{ (mem_output.stdout_lines | select('match', '^Mem:') | list).0 | regex_replace(' +', ' ') | split(' ') | slice(3,2) | join(' free of ') }}
+          Swap: {{ (mem_output.stdout_lines | select('match', '^Swap:') | list).0 | regex_replace(' +', ' ') | split(' ') | slice(3,2) | join(' free of ') }}
+          Disk (Root): {{ (disk_output.stdout_lines[1] | regex_replace(' +', ' ') | split(' ') | slice(3,2) | join(' free of ') ) }}
+          CPU Usage: {{ (cpu_output.stdout_lines | select('search', '^%Cpu') | list).0 | regex_search('[0-9.]+(?= id)', '\\1') | float | round(2) | int | subtract(100) }}% used
+          ----------------------------------------
+
+    - name: Log to /var/log/sys_monitor.log
+      ansible.builtin.lineinfile:
+        path: /var/log/sys_monitor.log
+        line: "{{ log_message }}"
+        create: yes
+        insertafter: EOF
+        state: present
+        mode: '0644'
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+ansible-playbook -i your_inventory_file system_monitor.yml
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Make sure the user running the playbook has sudo access.
+
+You can add this as a cron job using Ansible's cron module if you want it to run periodically.
+
+Adjust df -h / if you want to monitor other mount points.
+
+
+
+
